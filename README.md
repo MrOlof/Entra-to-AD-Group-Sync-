@@ -2,6 +2,20 @@
 
 Export Entra ID (Azure AD) group members to JSON on a cloud agent, then apply membership deltas to on-prem Active Directory groups on an isolated/self-hosted agent. No inbound connectivity to your DCs and no internet access required on the AD side.
 
+> **Use case:**  
+> Designed for organizations using **Entra Cloud Sync** where **Group Writeback** isn't working reliably.
+> Ideal for environments that leverage **RBAC** (e.g., Azure Files) but still rely on **on-prem AD** for access enforcement — allowing those groups to be governed directly from Entra ID.
+
+### Why not rely on Group Writeback for NTFS-controlled groups — an example of Cloud Sync writeback unreliability
+
+One major operational risk with Entra Cloud Sync’s Group Writeback is **group recreation**.  
+If the Cloud Sync agent or connection is disrupted, the service can recreate groups with a new random suffix and SID.  
+This breaks any NTFS or RBAC permissions tied to the old SID, leading to orphaned ACLs on file shares.
+
+This automation avoids that by **never recreating groups in AD** — it only updates membership of existing AD groups mapped to Entra IDs.  
+The AD object, including its SID and ACL references, remains stable, making it safe for environments where those groups are used for **NTFS permissions or on-prem RBAC (e.g., Azure Files, SMB shares, AVD, etc.)**.
+
+
 ## What this does
 
 - **Stage 1 (cloud agent)**: Uses a service principal + Graph API to export direct user UPNs for specific Entra groups to `out/entra_groups.json`. Publishes it as a build artifact.
