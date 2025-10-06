@@ -1,0 +1,82 @@
+# Entra→AD Group Sync (Split Pipeline)
+# Stage 1 runs in the cloud: exports Entra ID group members to JSON via Graph.
+# Stage 2 runs on an isolated/on-prem agent: applies deltas to AD groups using the JSON.
+
+trigger: none
+pr: none
+
+stages:
+# Stage 1 — Export Entra members (cloud agent)
+- stage: Export
+  displayName: Export Entra members
+  jobs:
+  - job: Export
+    pool:
+      vmImage: 'ubuntu-latest'
+    variables:
+      # TODO: set these as Pipeline Variables (mark ClientSecret as secret)
+      TenantId:     '$(ENTRA_TENANT_ID)'
+      ClientId:     '$(ENTRA_CLIENT_ID)'
+      ClientSecret: '$(ENTRA_CLIENT_SECRET)'
+    steps:
+    - checkout: self
+      clean: true
+
+    - pwsh: |
+        New-Item -ItemType Directory -Force -Path out | Out-Null
+      displayName: Ensure out folder
+
+    - task: PowerShell@2
+      displayName: Run main.ps1 (export UPNs)
+      inputs:
+        filePath: 'main.ps1'
+        pwsh: true
+      env:
+        TenantId: $(TenantId)
+        ClientId: $(ClientId)
+        ClientSecret: $(ClientSecret)
+
+    - task: PublishBuildArtifacts@1
+      displayName: Publish EntraExport (build artifact)
+      inputs:
+        PathtoPublish: 'out'
+        ArtifactName: 'EntraExport'
+        publishLocation: 'Container'
+
+# Stage 2 — Apply to AD (isolated/on-prem agent)
+- stage: Apply
+  displayName: Apply to AD
+  dependsOn: Export
+  condition: succeeded()
+  jobs:
+  - job: Apply
+    pool:
+      # TODO: replace with your self-hosted on-prem agent pool that can reach AD
+      name: 'OnPremAgent'
+    steps:
+    - checkout: self
+      clean: true
+
+    - task: DownloadBuildArtifacts@0
+      displayName: Download artifact from Stage 1
+      inputs:
+        buildType: 'current'
+        downloadType: 'single'
+        artifactName: 'EntraExport'
+        downloadPath: '$(Pipeline.Workspace)'
+
+    - task: PowerShell@2
+      displayName: Place export JSON
+      inputs:
+        targetType: 'inline'
+        script: |
+          Copy-Item "$(Pipeline.Workspace)\EntraExport\entra_groups.json" "$(Build.SourcesDirectory)\entra_groups.json" -Force
+        pwsh: false
+        workingDirectory: '$(Build.SourcesDirectory)'
+
+    - task: PowerShell@2
+      displayName: Run admembership.ps1 (apply deltas)
+      inputs:
+        filePath: 'admembership.ps1'
+        pwsh: false
+        workingDirectory: '$(Build.SourcesDirectory)'
