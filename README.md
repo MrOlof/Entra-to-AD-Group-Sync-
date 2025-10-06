@@ -43,6 +43,8 @@ Export Entra ID (Azure AD) group members to JSON on a cloud agent, then apply me
   - Add/Remove members of the target groups in the allowed OU.
 
 ## Setup
+<img width="811" height="657" alt="image" src="https://github.com/user-attachments/assets/23a0aa61-d6dc-4330-845a-b50ca52e839d" />
+
 
 1. **Edit `main.ps1`**
    - Set the `@($GroupIds)` array to the Entra group IDs you want to export.
